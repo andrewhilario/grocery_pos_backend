@@ -180,3 +180,5 @@ SPECTACULAR_SETTINGS = {
         {'name': 'Auth', 'description': 'User authentication and JWT tokens.'},
     ],
 }
+
+USE_DEPRECATED_PYTZ = False
