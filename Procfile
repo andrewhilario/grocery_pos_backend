@@ -1,0 +1,1 @@
+web: gunicorn grocery_pos_backend.wsgi --log-file -
