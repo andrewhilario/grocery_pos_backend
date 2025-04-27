@@ -7,6 +7,8 @@ from rest_framework.permissions import IsAuthenticated
 from .serializers import *
 from rest_framework.response import Response
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import F, Sum
 
 
 
@@ -46,13 +48,23 @@ class CategoryViewSet(viewsets.ModelViewSet):
         return Response(status=204)
     
 
+class ProductPagination(PageNumberPagination):
+    page_size = 10  # Number of items per page
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = CreateProductSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = ProductPagination
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = ProductByIdSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
         serializer = ProductByIdSerializer(queryset, many=True)
         return Response(serializer.data)
     
@@ -117,3 +129,26 @@ class InventoryViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(low_stock_items, many=True)
         return Response(serializer.data)
 
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        """
+        Returns:
+        - total_products: Total number of products in the system
+        - low_stock_count: Number of low stock inventory items
+        - overall_inventory_value: Sum of (quantity * product.price) for all inventory
+        """
+        total_products = Product.objects.count()
+        low_stock_count = self.get_queryset().filter(
+            quantity__lte=models.F('reorder_level')
+        ).count()
+
+        inventory_value = self.get_queryset().aggregate(
+            total_value=Sum(F('quantity') * F('product__price'))
+        )['total_value'] or 0
+
+        return Response({
+            "total_products": total_products,
+            "low_stock_count": low_stock_count,
+            "overall_inventory_value": inventory_value
+        })
